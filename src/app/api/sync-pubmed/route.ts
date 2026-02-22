@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/utils/supabase/server';
+import { getSupabaseAdmin } from '@/utils/supabase/server';
 import { XMLParser } from 'fast-xml-parser';
 
 export const dynamic = 'force-dynamic';
@@ -185,6 +185,7 @@ export async function GET(request: Request) {
         }
 
         // 4. Upsert into Supabase
+        const supabaseAdmin = getSupabaseAdmin();
         let stats = { added: 0, skipped: 0 };
 
         // Prefetch all valid category IDs from DB mapping slug -> id
