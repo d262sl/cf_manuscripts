@@ -4,11 +4,10 @@ import Link from 'next/link';
 import CategoryChart from '@/components/features/CategoryChart';
 import { Metadata } from 'next';
 import ManuscriptControls from '@/components/features/ManuscriptControls';
-import ReadFullTextButton from '@/components/features/ReadFullTextButton';
+import { ExternalLink } from 'lucide-react';
 
 type Props = {
     params: Promise<{ slug: string }>;
-    searchParams: Promise<{ sort?: 'recent' | 'popular' }>;
 };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -25,16 +24,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
 }
 
-export default async function CategoryPage({ params, searchParams }: Props) {
-    const [{ slug }, { sort }] = await Promise.all([params, searchParams]);
-    const currentSort = sort || 'recent';
+export default async function CategoryPage({ params }: Props) {
+    const { slug } = await params;
     const category = await getCategoryBySlug(slug);
 
     if (!category) {
         notFound();
     }
 
-    const manuscripts = await getManuscriptsByCategory(category.id, currentSort);
+    const manuscripts = await getManuscriptsByCategory(category.id);
     const allCategories = await getCategories();
 
     return (
@@ -66,21 +64,6 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                     <div className="lg:col-span-2 space-y-6">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2">
                             <h2 className="text-2xl font-bold text-gray-900">Publications</h2>
-
-                            <div className="flex bg-gray-100 p-1 rounded-lg mt-2 sm:mt-0 text-sm font-medium">
-                                <Link
-                                    href={`/categories/${slug}?sort=recent`}
-                                    className={`px-3 py-1.5 rounded-md transition-colors ${currentSort === 'recent' ? 'bg-white shadow-sm text-brand-blue' : 'text-gray-600 hover:text-gray-900'}`}
-                                >
-                                    Recent
-                                </Link>
-                                <Link
-                                    href={`/categories/${slug}?sort=popular`}
-                                    className={`px-3 py-1.5 rounded-md transition-colors flex items-center gap-1 ${currentSort === 'popular' ? 'bg-white shadow-sm text-brand-blue' : 'text-gray-600 hover:text-gray-900'}`}
-                                >
-                                    Popular
-                                </Link>
-                            </div>
                         </div>
 
                         {manuscripts.length === 0 ? (
@@ -97,13 +80,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                                     >
                                         <div className="flex flex-col h-full">
                                             {manuscript.publication_date && (
-                                                <div className="flex items-center justify-between mb-3 text-xs font-semibold uppercase tracking-wider text-brand-blue">
-                                                    <span>{new Date(manuscript.publication_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                                                    {manuscript.clicks > 0 && currentSort === 'popular' && (
-                                                        <span className="bg-brand-yellow/20 text-brand-blue-dark px-2 py-0.5 rounded-full flex items-center gap-1">
-                                                            {manuscript.clicks} reads
-                                                        </span>
-                                                    )}
+                                                <div className="text-xs font-semibold uppercase tracking-wider text-brand-blue mb-3">
+                                                    {new Date(manuscript.publication_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
                                                 </div>
                                             )}
 
@@ -134,7 +112,15 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                                                 </span>
 
                                                 {manuscript.url && (
-                                                    <ReadFullTextButton manuscriptId={manuscript.id} url={manuscript.url} />
+                                                    <a
+                                                        href={manuscript.url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-sm font-medium text-brand-blue hover:text-brand-blue-dark flex items-center"
+                                                    >
+                                                        Read Full Text
+                                                        <ExternalLink className="w-4 h-4 ml-1" />
+                                                    </a>
                                                 )}
                                             </div>
 
@@ -142,7 +128,8 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                                                 manuscriptId={manuscript.id}
                                                 currentCategoryId={category.id}
                                                 currentCategorySlug={category.slug}
-                                                categories={allCategories}
+                                                allCategories={allCategories}
+                                                assignedCategories={manuscript.categories || []}
                                             />
                                         </div>
                                     </article>
@@ -164,9 +151,9 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                                 <p className="text-sm text-blue-100 mb-4">
                                     Tracking publication trends helps us identify which areas of Cystic Fibrosis research are accelerating and where more resources might be needed.
                                 </p>
-                                <button className="w-full py-2 bg-white/10 hover:bg-white/20 transition-colors rounded text-sm font-semibold border border-white/20">
+                                <a href="mailto:info@cff.org?subject=Suggested%20Topic" className="block text-center w-full py-2 bg-white/10 hover:bg-white/20 transition-colors rounded text-sm font-semibold border border-white/20">
                                     Suggest a Topic
-                                </button>
+                                </a>
                             </div>
                         </div>
                     </div>

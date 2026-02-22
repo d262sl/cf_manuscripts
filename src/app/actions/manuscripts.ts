@@ -23,9 +23,9 @@ export async function deleteManuscript(manuscriptId: string, currentCategorySlug
     }
 }
 
-export async function recategorizeManuscript(manuscriptId: string, newCategoryId: string, currentCategorySlug: string) {
+export async function updateManuscriptCategories(manuscriptId: string, newCategoryIds: string[], currentCategorySlug: string) {
     try {
-        // 1. Remove existing category
+        // 1. Remove existing categories for this manuscript
         const { error: delError } = await supabaseAdmin
             .from('manuscript_categories')
             .delete()
@@ -33,12 +33,19 @@ export async function recategorizeManuscript(manuscriptId: string, newCategoryId
 
         if (delError) throw new Error(delError.message);
 
-        // 2. Insert new category 
-        const { error: insError } = await supabaseAdmin
-            .from('manuscript_categories')
-            .insert({ manuscript_id: manuscriptId, category_id: newCategoryId });
+        // 2. Insert new categories if there are any
+        if (newCategoryIds.length > 0) {
+            const insertData = newCategoryIds.map(categoryId => ({
+                manuscript_id: manuscriptId,
+                category_id: categoryId,
+            }));
 
-        if (insError) throw new Error(insError.message);
+            const { error: insError } = await supabaseAdmin
+                .from('manuscript_categories')
+                .insert(insertData);
+
+            if (insError) throw new Error(insError.message);
+        }
 
         revalidatePath(`/categories/${currentCategorySlug}`);
         revalidatePath('/');

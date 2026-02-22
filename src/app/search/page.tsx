@@ -1,7 +1,7 @@
 import { searchManuscriptsByAuthor } from '@/utils/supabase/api';
 import Link from 'next/link';
 import { Metadata } from 'next';
-import ReadFullTextButton from '@/components/features/ReadFullTextButton';
+import { ExternalLink } from 'lucide-react';
 
 export const metadata: Metadata = {
     title: 'Search Results | CF Manuscripts',
@@ -104,7 +104,15 @@ export default async function SearchPage({ searchParams }: Props) {
                                                 </div>
 
                                                 {manuscript.url && (
-                                                    <ReadFullTextButton manuscriptId={manuscript.id} url={manuscript.url} />
+                                                    <a
+                                                        href={manuscript.url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-sm font-medium text-brand-blue hover:text-brand-blue-dark flex items-center"
+                                                    >
+                                                        Read Full Text
+                                                        <ExternalLink className="w-4 h-4 ml-1" />
+                                                    </a>
                                                 )}
                                             </div>
                                         </div>

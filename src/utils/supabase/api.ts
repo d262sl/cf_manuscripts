@@ -14,8 +14,8 @@ export type Manuscript = {
     publication_date: string;
     abstract: string;
     url: string;
-    clicks: number;
     created_at: string;
+    categories?: Category[];
 };
 
 export async function getCategories() {
@@ -47,11 +47,18 @@ export async function getCategoryBySlug(slug: string) {
     return data as Category;
 }
 
-export async function getManuscriptsByCategory(categoryId: string, sortBy: 'recent' | 'popular' = 'recent') {
+export async function getManuscriptsByCategory(categoryId: string) {
     const { data, error } = await supabase
         .from('manuscript_categories')
         .select(`
-            manuscripts (*)
+            manuscripts:manuscripts (
+                *,
+                category_links:manuscript_categories (
+                    category:categories (
+                        id, name, slug
+                    )
+                )
+            )
         `)
         .eq('category_id', categoryId);
 
@@ -63,14 +70,19 @@ export async function getManuscriptsByCategory(categoryId: string, sortBy: 'rece
     // Supabase returns an array of objects where 'manuscripts' is the nested object. 
     // Filter out any nulls just in case, then sort in JS to avoid complex joined-table sorting errors.
     const manuscripts = data
-        .map((item: any) => item.manuscripts)
+        .map((item: any) => {
+            const ms = item.manuscripts;
+            if (!ms) return null;
+            return {
+                ...ms,
+                categories: ms.category_links
+                    ? ms.category_links.map((link: any) => link.category).filter(Boolean)
+                    : []
+            };
+        })
         .filter((ms: any) => ms !== null) as Manuscript[];
 
-    if (sortBy === 'popular') {
-        manuscripts.sort((a, b) => (b.clicks || 0) - (a.clicks || 0));
-    } else {
-        manuscripts.sort((a, b) => new Date(b.publication_date).getTime() - new Date(a.publication_date).getTime());
-    }
+    manuscripts.sort((a, b) => new Date(b.publication_date).getTime() - new Date(a.publication_date).getTime());
 
     return manuscripts;
 }

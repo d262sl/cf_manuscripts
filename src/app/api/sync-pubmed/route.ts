@@ -21,6 +21,7 @@ const categoryKeywords: Record<string, string[]> = {
     'genetics-mutations': ['gene', 'mutation', 'genetics', 'allele', 'f508del', 'cftr', 'variant'],
     'diagnosis-screening': ['diagnosis', 'screening', 'newborn', 'sweat test', 'biomarker', 'detect'],
     'patient-care-quality-of-life': ['care', 'quality of life', 'qol', 'patient', 'nursing', 'mental health', 'psychological', 'adherence'],
+    'cff-patient-registry': ['cffpr', 'cystic fibrosis patient registry', 'cystic fibrosis foundation patient registry'],
     'patient-registry': ['registry', 'database', 'cohort', 'epidemiology', 'population-based', 'registries']
 };
 
@@ -36,11 +37,11 @@ interface ParsedManuscript {
 
 export async function GET(request: Request) {
     try {
-        // 1. Fetch recent PubMed IDs for Cystic Fibrosis (last 5 years)
         const currentYear = new Date().getFullYear();
         const startYear = currentYear - 5;
 
-        const searchParams = new URLSearchParams({
+        // General search
+        const searchParamsGeneral = new URLSearchParams({
             db: 'pubmed',
             term: `("Cystic Fibrosis"[Title] OR "CFTR"[Title]) AND ("${startYear}/01/01"[Date - Publication] : "3000"[Date - Publication])`,
             retmode: 'json',
@@ -48,33 +49,64 @@ export async function GET(request: Request) {
             sort: 'pub_date'
         });
 
-        const searchResponse = await fetch(`${PUBMED_SEARCH_URL}?${searchParams.toString()}`);
-        if (!searchResponse.ok) throw new Error('PubMed Search API failed');
-        const searchData = await searchResponse.json();
-        const pmids: string[] = searchData.esearchresult?.idlist || [];
+        // Registry specific search
+        const searchParamsRegistry = new URLSearchParams({
+            db: 'pubmed',
+            term: `("Cystic Fibrosis Patient Registry"[Title/Abstract] OR "CFFPR"[Title/Abstract]) AND ("${startYear}/01/01"[Date - Publication] : "3000"[Date - Publication])`,
+            retmode: 'json',
+            retmax: '2000', // Fetch extensively
+            sort: 'pub_date'
+        });
+
+        const [searchResponseGeneral, searchResponseRegistry] = await Promise.all([
+            fetch(`${PUBMED_SEARCH_URL}?${searchParamsGeneral.toString()}`),
+            fetch(`${PUBMED_SEARCH_URL}?${searchParamsRegistry.toString()}`)
+        ]);
+
+        if (!searchResponseGeneral.ok || !searchResponseRegistry.ok) {
+            throw new Error('PubMed Search API failed');
+        }
+
+        const searchDataGeneral = await searchResponseGeneral.json();
+        const searchDataRegistry = await searchResponseRegistry.json();
+
+        // Combine
+        const pmidsSet = new Set<string>();
+        (searchDataGeneral.esearchresult?.idlist || []).forEach((id: string) => pmidsSet.add(id));
+        (searchDataRegistry.esearchresult?.idlist || []).forEach((id: string) => pmidsSet.add(id));
+        const pmids = Array.from(pmidsSet);
 
         if (pmids.length === 0) {
             return NextResponse.json({ message: 'No new manuscripts found.' });
         }
 
         // 2. Fetch full XML details for these PMIDs
-        const fetchParams = new URLSearchParams({
-            db: 'pubmed',
-            id: pmids.join(','),
-            retmode: 'xml'
-        });
+        const xmlDataChunks: string[] = [];
+        const chunkSize = 200;
+        for (let i = 0; i < pmids.length; i += chunkSize) {
+            const chunk = pmids.slice(i, i + chunkSize);
+            const fetchParams = new URLSearchParams({
+                db: 'pubmed',
+                id: chunk.join(','),
+                retmode: 'xml'
+            });
 
-        const fetchResponse = await fetch(`${PUBMED_FETCH_URL}?${fetchParams.toString()}`);
-        if (!fetchResponse.ok) throw new Error('PubMed Fetch API failed');
-        const xmlData = await fetchResponse.text();
+            const fetchResponse = await fetch(`${PUBMED_FETCH_URL}?${fetchParams.toString()}`);
+            if (!fetchResponse.ok) throw new Error('PubMed Fetch API failed');
+            xmlDataChunks.push(await fetchResponse.text());
+        }
 
         const parser = new XMLParser({
             ignoreAttributes: false,
             isArray: (name) => ['PubmedArticle', 'Author', 'AbstractText'].indexOf(name) !== -1
         });
-        const parsedData = parser.parse(xmlData);
 
-        const articles = parsedData.PubmedArticleSet?.PubmedArticle || [];
+        let articles: any[] = [];
+        for (const xmlData of xmlDataChunks) {
+            const parsedData = parser.parse(xmlData);
+            const chunkArticles = parsedData.PubmedArticleSet?.PubmedArticle || [];
+            articles = articles.concat(chunkArticles);
+        }
 
         const manuscriptsToProcess: ParsedManuscript[] = [];
 
