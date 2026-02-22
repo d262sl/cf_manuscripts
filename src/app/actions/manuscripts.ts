@@ -1,10 +1,12 @@
 'use server';
 
-import { supabaseAdmin } from '@/utils/supabase/server';
+import { getSupabaseAdmin } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
 
 export async function deleteManuscript(manuscriptId: string, currentCategorySlug: string) {
     try {
+        const supabaseAdmin = getSupabaseAdmin();
+
         // We only delete from manuscript_categories, creating an "orphan" manuscript.
         // This removes it from the UI but keeps it in the `manuscripts` table, 
         // ensuring the sync-pubmed script still sees its URL and skips re-downloading it.
@@ -25,6 +27,8 @@ export async function deleteManuscript(manuscriptId: string, currentCategorySlug
 
 export async function updateManuscriptCategories(manuscriptId: string, newCategoryIds: string[], currentCategorySlug: string) {
     try {
+        const supabaseAdmin = getSupabaseAdmin();
+
         // 1. Remove existing categories for this manuscript
         const { error: delError } = await supabaseAdmin
             .from('manuscript_categories')
