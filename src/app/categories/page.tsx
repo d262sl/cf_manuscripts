@@ -2,6 +2,8 @@ import { getCategories, getManuscriptCountByCategory } from '@/utils/supabase/ap
 import Link from 'next/link';
 import { Metadata } from 'next';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
     title: 'All Categories | CF Manuscripts',
     description: 'Browse all research categories related to Cystic Fibrosis.',

@@ -39,13 +39,15 @@ interface ParsedManuscript {
 
 export async function GET(request: Request) {
     try {
-        const currentYear = new Date().getFullYear();
-        const startYear = currentYear - 5;
+        // Look back 6 months for daily syncs to prevent NCBI XML fetch from taking >10 seconds on Netlify Free Tier.
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        const startString = `${sixMonthsAgo.getFullYear()}/${String(sixMonthsAgo.getMonth() + 1).padStart(2, '0')}/${String(sixMonthsAgo.getDate()).padStart(2, '0')}`;
 
         // General search
         const searchParamsGeneral = new URLSearchParams({
             db: 'pubmed',
-            term: `("Cystic Fibrosis"[Title] OR "CFTR"[Title]) AND ("${startYear}/01/01"[Date - Publication] : "3000"[Date - Publication])`,
+            term: `("Cystic Fibrosis"[Title] OR "CFTR"[Title]) AND ("${startString}"[Date - Publication] : "3000"[Date - Publication])`,
             retmode: 'json',
             retmax: '300', // Fetch more records to populate history
             sort: 'pub_date'
@@ -54,7 +56,7 @@ export async function GET(request: Request) {
         // Registry specific search
         const searchParamsRegistry = new URLSearchParams({
             db: 'pubmed',
-            term: `("Cystic Fibrosis Patient Registry"[Title/Abstract] OR "CFFPR"[Title/Abstract]) AND ("${startYear}/01/01"[Date - Publication] : "3000"[Date - Publication])`,
+            term: `("Cystic Fibrosis Patient Registry"[Title/Abstract] OR "CFFPR"[Title/Abstract]) AND ("${startString}"[Date - Publication] : "3000"[Date - Publication])`,
             retmode: 'json',
             retmax: '2000', // Fetch extensively
             sort: 'pub_date'
@@ -63,7 +65,7 @@ export async function GET(request: Request) {
         // Lung Transplants (CF & COPD)
         const searchParamsTransplants = new URLSearchParams({
             db: 'pubmed',
-            term: `("Lung Transplantation"[Title/Abstract] OR "Lung Transplant"[Title/Abstract]) AND ("Cystic Fibrosis"[Title/Abstract] OR "COPD"[Title/Abstract] OR "Chronic Obstructive Pulmonary Disease"[Title/Abstract]) AND ("${startYear}/01/01"[Date - Publication] : "3000"[Date - Publication])`,
+            term: `("Lung Transplantation"[Title/Abstract] OR "Lung Transplant"[Title/Abstract]) AND ("Cystic Fibrosis"[Title/Abstract] OR "COPD"[Title/Abstract] OR "Chronic Obstructive Pulmonary Disease"[Title/Abstract]) AND ("${startString}"[Date - Publication] : "3000"[Date - Publication])`,
             retmode: 'json',
             retmax: '1000',
             sort: 'pub_date'
@@ -74,9 +76,13 @@ export async function GET(request: Request) {
         if (!searchResponseGeneral.ok) throw new Error(`PubMed Search API failed for General: ${searchResponseGeneral.statusText}`);
         const searchDataGeneral = await searchResponseGeneral.json();
 
+        await new Promise(resolve => setTimeout(resolve, 400));
+
         const searchResponseRegistry = await fetch(`${PUBMED_SEARCH_URL}?${searchParamsRegistry.toString()}`, { cache: "no-store" });
         if (!searchResponseRegistry.ok) throw new Error(`PubMed Search API failed for Registry: ${searchResponseRegistry.statusText}`);
         const searchDataRegistry = await searchResponseRegistry.json();
+
+        await new Promise(resolve => setTimeout(resolve, 400));
 
         const searchResponseTransplants = await fetch(`${PUBMED_SEARCH_URL}?${searchParamsTransplants.toString()}`, { cache: "no-store" });
         if (!searchResponseTransplants.ok) throw new Error(`PubMed Search API failed for Transplants: ${searchResponseTransplants.statusText}`);
@@ -213,66 +219,89 @@ export async function GET(request: Request) {
             });
         }
 
-        // 4. Upsert into Supabase
+        // 4. Upsert into Supabase (Bulk Operations)
         const supabaseAdmin = getSupabaseAdmin();
-        let stats = { added: 0, skipped: 0 };
 
         // Prefetch all valid category IDs from DB mapping slug -> id
         const { data: catData } = await supabaseAdmin.from('categories').select('id, slug');
         const slugToIdMap: Record<string, string> = {};
         catData?.forEach(c => slugToIdMap[c.slug] = c.id);
 
-        for (const ms of manuscriptsToProcess) {
-            // Check if URL/PMID already exists
-            const { data: existing } = await supabaseAdmin
+        // Find existing manuscripts to skip
+        const allUrls = manuscriptsToProcess.map(m => m.url);
+
+        let existingUrls = new Set<string>();
+        // Process 'in' query in batches of 200 to avoid overly large URI length errors in Supabase HTTP calls
+        for (let i = 0; i < allUrls.length; i += 200) {
+            const urlChunk = allUrls.slice(i, i + 200);
+            const { data: existingChunk } = await supabaseAdmin
                 .from('manuscripts')
-                .select('id')
-                .eq('url', ms.url)
-                .single();
+                .select('url')
+                .in('url', urlChunk);
 
-            if (existing) {
-                stats.skipped++;
-                continue;
-            }
+            existingChunk?.forEach(m => existingUrls.add(m.url));
+        }
 
-            // Insert manuscript
-            const { data: newMs, error: msError } = await supabaseAdmin
+        const newManuscripts = manuscriptsToProcess.filter(m => !existingUrls.has(m.url));
+        const skippedCount = manuscriptsToProcess.length - newManuscripts.length;
+
+        let addedCount = 0;
+
+        if (newManuscripts.length > 0) {
+            const manuscriptsToInsert = newManuscripts.map(ms => ({
+                title: ms.title,
+                abstract: ms.abstract,
+                authors: ms.authors,
+                publication_date: ms.publication_date?.toISOString(),
+                url: ms.url
+            }));
+
+            // Insert new manuscripts and return their IDs
+            const { data: insertedMs, error: msError } = await supabaseAdmin
                 .from('manuscripts')
-                .insert({
-                    title: ms.title,
-                    abstract: ms.abstract,
-                    authors: ms.authors,
-                    publication_date: ms.publication_date?.toISOString(),
-                    url: ms.url
-                })
-                .select('id')
-                .single();
+                .insert(manuscriptsToInsert)
+                .select('id, url');
 
-            if (msError || !newMs) {
-                console.error('Insert manuscript error:', msError);
-                continue;
+            if (msError) {
+                console.error('Bulk Insert manuscript error:', msError);
+                throw new Error('Database insert failed');
             }
 
-            // Insert junction categories
-            const junctionInserts = ms.slugs
-                .map(slug => slugToIdMap[slug])
-                .filter(Boolean)
-                .map(catId => ({
-                    manuscript_id: newMs.id,
-                    category_id: catId
-                }));
+            addedCount = insertedMs?.length || 0;
 
-            if (junctionInserts.length > 0) {
-                await supabaseAdmin.from('manuscript_categories').insert(junctionInserts);
+            // Map URLs back to original parsed data to get their intended categories
+            const urlToIdMap: Record<string, string> = {};
+            insertedMs?.forEach(m => urlToIdMap[m.url] = m.id);
+
+            const junctionInserts: any[] = [];
+            for (const ms of newManuscripts) {
+                const newId = urlToIdMap[ms.url];
+                if (!newId) continue;
+
+                ms.slugs.forEach(slug => {
+                    const catId = slugToIdMap[slug];
+                    if (catId) {
+                        junctionInserts.push({
+                            manuscript_id: newId,
+                            category_id: catId
+                        });
+                    }
+                });
             }
 
-            stats.added++;
+            // Bulk insert junctions in batches to avoid payload limits
+            for (let i = 0; i < junctionInserts.length; i += 500) {
+                const junctionChunk = junctionInserts.slice(i, i + 500);
+                if (junctionChunk.length > 0) {
+                    await supabaseAdmin.from('manuscript_categories').insert(junctionChunk);
+                }
+            }
         }
 
         return NextResponse.json({
             success: true,
-            message: `Sync completed. Added ${stats.added} new manuscripts, skipped ${stats.skipped} existing.`,
-            stats
+            message: `Sync completed. Added ${addedCount} new manuscripts, skipped ${skippedCount} existing.`,
+            stats: { added: addedCount, skipped: skippedCount }
         });
 
     } catch (err: any) {
