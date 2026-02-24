@@ -226,25 +226,26 @@ export async function GET(request: Request) {
         const slugToIdMap: Record<string, string> = {};
         catData?.forEach(c => slugToIdMap[c.slug] = c.id);
 
-        // Find existing manuscripts to skip
+        // Find existing manuscripts to skip insertion, but grab their IDs for tagging
         const allUrls = manuscriptsToProcess.map(m => m.url);
 
-        let existingUrls = new Set<string>();
+        let existingUrlMap = new Map<string, string>(); // url -> id
         // Process 'in' query in batches of 200 to avoid overly large URI length errors in Supabase HTTP calls
         for (let i = 0; i < allUrls.length; i += 200) {
             const urlChunk = allUrls.slice(i, i + 200);
             const { data: existingChunk } = await supabaseAdmin
                 .from('manuscripts')
-                .select('url')
+                .select('id, url')
                 .in('url', urlChunk);
 
-            existingChunk?.forEach(m => existingUrls.add(m.url));
+            existingChunk?.forEach(m => existingUrlMap.set(m.url, m.id));
         }
 
-        const newManuscripts = manuscriptsToProcess.filter(m => !existingUrls.has(m.url));
+        const newManuscripts = manuscriptsToProcess.filter(m => !existingUrlMap.has(m.url));
         const skippedCount = manuscriptsToProcess.length - newManuscripts.length;
 
         let addedCount = 0;
+        const allManuscriptIds: Record<string, string> = { ...Object.fromEntries(existingUrlMap) }; // Map of URL -> ID for all items
 
         if (newManuscripts.length > 0) {
             const manuscriptsToInsert = newManuscripts.map(ms => ({
@@ -268,32 +269,31 @@ export async function GET(request: Request) {
 
             addedCount = insertedMs?.length || 0;
 
-            // Map URLs back to original parsed data to get their intended categories
-            const urlToIdMap: Record<string, string> = {};
-            insertedMs?.forEach(m => urlToIdMap[m.url] = m.id);
+            insertedMs?.forEach(m => allManuscriptIds[m.url] = m.id);
+        }
 
-            const junctionInserts: any[] = [];
-            for (const ms of newManuscripts) {
-                const newId = urlToIdMap[ms.url];
-                if (!newId) continue;
+        // Generate junctions for ALL manuscripts to catch missing newly-mapped categories on existing papers
+        const junctionInserts: any[] = [];
+        for (const ms of manuscriptsToProcess) {
+            const msId = allManuscriptIds[ms.url];
+            if (!msId) continue;
 
-                ms.slugs.forEach(slug => {
-                    const catId = slugToIdMap[slug];
-                    if (catId) {
-                        junctionInserts.push({
-                            manuscript_id: newId,
-                            category_id: catId
-                        });
-                    }
-                });
-            }
-
-            // Bulk insert junctions in batches to avoid payload limits
-            for (let i = 0; i < junctionInserts.length; i += 500) {
-                const junctionChunk = junctionInserts.slice(i, i + 500);
-                if (junctionChunk.length > 0) {
-                    await supabaseAdmin.from('manuscript_categories').insert(junctionChunk);
+            ms.slugs.forEach(slug => {
+                const catId = slugToIdMap[slug];
+                if (catId) {
+                    junctionInserts.push({
+                        manuscript_id: msId,
+                        category_id: catId
+                    });
                 }
+            });
+        }
+
+        // Bulk insert junctions in batches, ignoring duplicates if the tag previously existed
+        for (let i = 0; i < junctionInserts.length; i += 500) {
+            const junctionChunk = junctionInserts.slice(i, i + 500);
+            if (junctionChunk.length > 0) {
+                await supabaseAdmin.from('manuscript_categories').upsert(junctionChunk, { onConflict: 'manuscript_id, category_id', ignoreDuplicates: true });
             }
         }
 
