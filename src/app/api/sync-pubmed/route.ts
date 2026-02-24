@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/utils/supabase/server';
 import { XMLParser } from 'fast-xml-parser';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300; // Allows the function to run for up to 5 minutes on Vercel/Netlify for large PubMed XML fetches
 // For Vercel Cron Jobs, you can configure headers but here we just export a GET endpoint.
 // A real production app might require an authorization header check.
 
@@ -68,18 +69,17 @@ export async function GET(request: Request) {
             sort: 'pub_date'
         });
 
-        const [searchResponseGeneral, searchResponseRegistry, searchResponseTransplants] = await Promise.all([
-            fetch(`${PUBMED_SEARCH_URL}?${searchParamsGeneral.toString()}`),
-            fetch(`${PUBMED_SEARCH_URL}?${searchParamsRegistry.toString()}`),
-            fetch(`${PUBMED_SEARCH_URL}?${searchParamsTransplants.toString()}`)
-        ]);
-
-        if (!searchResponseGeneral.ok || !searchResponseRegistry.ok || !searchResponseTransplants.ok) {
-            throw new Error('PubMed Search API failed');
-        }
-
+        // Fetch sequentially to avoid NCBI 3-requests-per-second rate limit without API key
+        const searchResponseGeneral = await fetch(`${PUBMED_SEARCH_URL}?${searchParamsGeneral.toString()}`, { cache: "no-store" });
+        if (!searchResponseGeneral.ok) throw new Error(`PubMed Search API failed for General: ${searchResponseGeneral.statusText}`);
         const searchDataGeneral = await searchResponseGeneral.json();
+
+        const searchResponseRegistry = await fetch(`${PUBMED_SEARCH_URL}?${searchParamsRegistry.toString()}`, { cache: "no-store" });
+        if (!searchResponseRegistry.ok) throw new Error(`PubMed Search API failed for Registry: ${searchResponseRegistry.statusText}`);
         const searchDataRegistry = await searchResponseRegistry.json();
+
+        const searchResponseTransplants = await fetch(`${PUBMED_SEARCH_URL}?${searchParamsTransplants.toString()}`, { cache: "no-store" });
+        if (!searchResponseTransplants.ok) throw new Error(`PubMed Search API failed for Transplants: ${searchResponseTransplants.statusText}`);
         const searchDataTransplants = await searchResponseTransplants.json();
 
         // Combine
@@ -95,7 +95,10 @@ export async function GET(request: Request) {
 
         // 2. Fetch full XML details for these PMIDs
         const xmlDataChunks: string[] = [];
-        const chunkSize = 200;
+        const chunkSize = 100; // Reduced from 200 to 100
+
+        console.log(`Starting XML Fetch for ${pmids.length} PMIDs spread across ${Math.ceil(pmids.length / chunkSize)} chunks...`);
+
         for (let i = 0; i < pmids.length; i += chunkSize) {
             const chunk = pmids.slice(i, i + chunkSize);
             const fetchParams = new URLSearchParams({
@@ -104,8 +107,15 @@ export async function GET(request: Request) {
                 retmode: 'xml'
             });
 
-            const fetchResponse = await fetch(`${PUBMED_FETCH_URL}?${fetchParams.toString()}`);
-            if (!fetchResponse.ok) throw new Error('PubMed Fetch API failed');
+            // Add a 500ms delay between fetches to respect NCBI rate limits
+            await new Promise(resolve => setTimeout(resolve, 500));
+            console.log(`Fetching chunk ${i / chunkSize + 1}...`);
+            const fetchResponse = await fetch(`${PUBMED_FETCH_URL}?${fetchParams.toString()}`, { cache: "no-store", keepalive: true });
+            if (!fetchResponse.ok) {
+                console.error(`Failed Fetch URL: ${PUBMED_FETCH_URL}?${fetchParams.toString()}`);
+                console.error(`Failed Fetch Status text: ${fetchResponse.statusText}`);
+                throw new Error('PubMed Fetch API failed');
+            }
             xmlDataChunks.push(await fetchResponse.text());
         }
 
