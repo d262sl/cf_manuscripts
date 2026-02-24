@@ -3,7 +3,6 @@ import { getSupabaseAdmin } from '@/utils/supabase/server';
 import { XMLParser } from 'fast-xml-parser';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300; // Allows the function to run for up to 5 minutes on Vercel/Netlify for large PubMed XML fetches
 // For Vercel Cron Jobs, you can configure headers but here we just export a GET endpoint.
 // A real production app might require an authorization header check.
 
