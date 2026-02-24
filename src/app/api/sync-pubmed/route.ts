@@ -22,7 +22,8 @@ const categoryKeywords: Record<string, string[]> = {
     'diagnosis-screening': ['diagnosis', 'screening', 'newborn', 'sweat test', 'biomarker', 'detect'],
     'patient-care-quality-of-life': ['care', 'quality of life', 'qol', 'patient', 'nursing', 'mental health', 'psychological', 'adherence'],
     'cff-patient-registry': ['cffpr', 'cystic fibrosis patient registry', 'cystic fibrosis foundation patient registry'],
-    'patient-registry': ['registry', 'database', 'cohort', 'epidemiology', 'population-based', 'registries']
+    'patient-registry': ['registry', 'database', 'cohort', 'epidemiology', 'population-based', 'registries'],
+    'lung-transplants': ['transplant', 'transplantation', 'graft']
 };
 
 interface ParsedManuscript {
@@ -58,22 +59,34 @@ export async function GET(request: Request) {
             sort: 'pub_date'
         });
 
-        const [searchResponseGeneral, searchResponseRegistry] = await Promise.all([
+        // Lung Transplants (CF & COPD)
+        const searchParamsTransplants = new URLSearchParams({
+            db: 'pubmed',
+            term: `("Lung Transplantation"[Title/Abstract] OR "Lung Transplant"[Title/Abstract]) AND ("Cystic Fibrosis"[Title/Abstract] OR "COPD"[Title/Abstract] OR "Chronic Obstructive Pulmonary Disease"[Title/Abstract]) AND ("${startYear}/01/01"[Date - Publication] : "3000"[Date - Publication])`,
+            retmode: 'json',
+            retmax: '1000',
+            sort: 'pub_date'
+        });
+
+        const [searchResponseGeneral, searchResponseRegistry, searchResponseTransplants] = await Promise.all([
             fetch(`${PUBMED_SEARCH_URL}?${searchParamsGeneral.toString()}`),
-            fetch(`${PUBMED_SEARCH_URL}?${searchParamsRegistry.toString()}`)
+            fetch(`${PUBMED_SEARCH_URL}?${searchParamsRegistry.toString()}`),
+            fetch(`${PUBMED_SEARCH_URL}?${searchParamsTransplants.toString()}`)
         ]);
 
-        if (!searchResponseGeneral.ok || !searchResponseRegistry.ok) {
+        if (!searchResponseGeneral.ok || !searchResponseRegistry.ok || !searchResponseTransplants.ok) {
             throw new Error('PubMed Search API failed');
         }
 
         const searchDataGeneral = await searchResponseGeneral.json();
         const searchDataRegistry = await searchResponseRegistry.json();
+        const searchDataTransplants = await searchResponseTransplants.json();
 
         // Combine
         const pmidsSet = new Set<string>();
         (searchDataGeneral.esearchresult?.idlist || []).forEach((id: string) => pmidsSet.add(id));
         (searchDataRegistry.esearchresult?.idlist || []).forEach((id: string) => pmidsSet.add(id));
+        (searchDataTransplants.esearchresult?.idlist || []).forEach((id: string) => pmidsSet.add(id));
         const pmids = Array.from(pmidsSet);
 
         if (pmids.length === 0) {
@@ -163,6 +176,12 @@ export async function GET(request: Request) {
             // Auto-categorize
             const textToSearch = `${title} ${abstract}`.toLowerCase();
             const matchedSlugs = new Set<string>();
+
+            // CFF Employee Check
+            const authorsLower = authors.toLowerCase();
+            if (authorsLower.includes('elbert') || authorsLower.includes('cromwell') || authorsLower.includes('faro') || authorsLower.includes('goss')) {
+                matchedSlugs.add('cff-publications');
+            }
 
             for (const [slug, keywords] of Object.entries(categoryKeywords)) {
                 if (keywords.some(kw => textToSearch.includes(kw))) {
