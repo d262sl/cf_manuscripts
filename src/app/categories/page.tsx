@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
 
 export const metadata: Metadata = {
     title: 'All Categories | CF Manuscripts',
