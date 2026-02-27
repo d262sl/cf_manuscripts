@@ -60,7 +60,7 @@ export default function AboutPage() {
                             <div className="space-y-4">
                                 <div>
                                     <h4 className="text-sm font-semibold uppercase tracking-wider text-brand-blue mb-1">Created By</h4>
-                                    <p className="text-gray-900 font-medium">Alexander Albert (with the use of AI)</p>
+                                    <p className="text-gray-900 font-medium">Alexander Elbert (with the use of AI)</p>
                                 </div>
                                 <div>
                                     <h4 className="text-sm font-semibold uppercase tracking-wider text-brand-blue mb-1">Get in Touch</h4>

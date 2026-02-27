@@ -81,8 +81,14 @@ export default function ManuscriptControls({ manuscriptId, currentCategoryId, cu
                     <div className="absolute bottom-full left-0 mb-2 w-64 bg-white border border-gray-200 shadow-xl rounded-lg overflow-hidden z-50 flex flex-col">
                         <div className="p-2 max-h-48 overflow-y-auto">
                             {allCategories.map(cat => (
-                                <label key={cat.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer group">
-                                    <div className={`w-4 h-4 rounded border flex items-center justify-center ${selectedIds.has(cat.id) ? 'bg-brand-blue border-brand-blue' : 'border-gray-300 group-hover:border-brand-blue'}`}>
+                                <label key={cat.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer group relative">
+                                    <input
+                                        type="checkbox"
+                                        className="sr-only"
+                                        checked={selectedIds.has(cat.id)}
+                                        onChange={() => toggleCategory(cat.id)}
+                                    />
+                                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selectedIds.has(cat.id) ? 'bg-brand-blue border-brand-blue' : 'border-gray-300 group-hover:border-brand-blue'}`}>
                                         {selectedIds.has(cat.id) && <Check className="w-3 h-3 text-white" />}
                                     </div>
                                     <span className="text-sm text-gray-700">{cat.name}</span>
