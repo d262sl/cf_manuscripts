@@ -105,7 +105,7 @@ export async function getManuscriptCountByCategory() {
     return data.map((cat: any) => ({
         name: cat.name,
         slug: cat.slug,
-        count: cat.manuscript_categories[0].count
+        count: cat.manuscript_categories?.[0]?.count || 0
     }));
 }
 

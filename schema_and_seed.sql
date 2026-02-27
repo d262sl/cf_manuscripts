@@ -45,7 +45,9 @@ INSERT INTO public.categories (name, slug) VALUES
 ('Genetics & Mutations', 'genetics-mutations'),
 ('Diagnosis & Screening', 'diagnosis-screening'),
 ('Patient Care & Quality of Life', 'patient-care-quality-of-life'),
-('CFF Patient Registry', 'cff-patient-registry')
+('CFF Patient Registry', 'cff-patient-registry'),
+('Lung Transplants', 'lung-transplants'),
+('CFF Publications', 'cff-publications')
 ON CONFLICT (slug) DO NOTHING;
 
 -- Seed some dummy manuscripts for visual testing

@@ -1,6 +1,10 @@
 import { getCategories, getManuscriptCountByCategory } from '@/utils/supabase/api';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+export const revalidate = 0;
+
 export default async function Home() {
   const categories = await getCategories();
   const counts = await getManuscriptCountByCategory();
