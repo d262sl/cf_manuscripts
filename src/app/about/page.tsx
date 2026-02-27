@@ -30,11 +30,29 @@ export default function AboutPage() {
                     <div className="lg:col-span-2 space-y-6">
                         <article className="group bg-white rounded-xl shadow-sm border border-gray-100 p-8 transition-all hover:shadow-md animate-slide-up">
                             <h3 className="text-2xl font-bold text-gray-900 mb-4 border-b border-gray-100 pb-4">
-                                Our Goal
+                                Goal
                             </h3>
-                            <p className="text-gray-700 leading-relaxed text-lg">
+                            <p className="text-gray-700 leading-relaxed text-lg mb-8">
                                 The primary purpose of this application is to ease access to research publications on Cystic Fibrosis matters. By aggregating studies and sorting them into intuitive categories, we aim to accelerate discovery for patients, clinicians, and researchers alike.
                             </p>
+
+                            <h3 className="text-2xl font-bold text-gray-900 mb-4 border-b border-gray-100 pb-4 mt-8">
+                                Managing Publications
+                            </h3>
+                            <p className="text-gray-700 leading-relaxed mb-4">
+                                To ensure our database remains accurate, users can actively manage their publications to the best of their knowledge:
+                            </p>
+                            <ul className="list-disc list-inside text-gray-700 space-y-3 ml-2">
+                                <li>
+                                    <strong>Updating Categories:</strong> Navigate to a publication and click the <span className="font-semibold text-gray-900">Categories</span> button. From the dropdown, you can select or unselect the relevant categories the manuscript belongs to, then click Save to apply your changes.
+                                </li>
+                                <li>
+                                    <strong>Removing Manuscripts:</strong> If a publication needs to be completely removed from a category ranking, you can easily remove it by clicking the <span className="text-red-500 font-semibold">Remove</span> button.
+                                </li>
+                                <li>
+                                    <strong>Syncing with PubMed:</strong> Clicking the <span className="font-semibold text-brand-blue">Sync PubMed</span> button in the header triggers a manual scan of the National Center for Biotechnology Information (NCBI) database. The system fetches any new manuscripts matching our criteria from the last 6 months, automatically categorizes them based on title and abstract keywords, and adds them to our database.
+                                </li>
+                            </ul>
                         </article>
 
                         <article className="group bg-white rounded-xl shadow-sm border border-gray-100 p-8 transition-all hover:shadow-md animate-slide-up" style={{ animationDelay: '0.1s' }}>
