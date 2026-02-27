@@ -194,7 +194,12 @@ export async function GET(request: Request) {
 
             // CFF Employee Check
             const authorsLower = authors.toLowerCase();
-            if (authorsLower.includes('elbert') || authorsLower.includes('cromwell') || authorsLower.includes('faro') || authorsLower.includes('goss')) {
+            const cffAuthors = [
+                'elbert', 'boyle', 'clancy', 'cromwell', 'faro',
+                'ostrenga', 'petren', 'fink', 'rowe', 'marshall', 'sabadosa'
+            ];
+
+            if (cffAuthors.some(author => authorsLower.includes(author))) {
                 matchedSlugs.add('cff-publications');
             }
 

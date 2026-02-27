@@ -9,5 +9,9 @@ export function getSupabaseAdmin() {
         throw new Error("Missing Supabase environment variables for Admin Client.");
     }
 
-    return createClient(supabaseUrl, supabaseServiceKey);
+    return createClient(supabaseUrl, supabaseServiceKey, {
+        global: {
+            fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' })
+        }
+    });
 }
