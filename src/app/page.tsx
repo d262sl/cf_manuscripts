@@ -91,9 +91,9 @@ export default async function Home() {
           <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto text-balance">
             Are you a researcher or clinician? Contribute your recent publications to our database to help accelerate CF research.
           </p>
-          <button className="rounded-full bg-brand-yellow px-8 py-4 text-lg font-bold text-brand-blue-dark transition-colors hover:bg-white shadow-lg">
+          <Link href="/submit" className="inline-block rounded-full bg-brand-yellow px-8 py-4 text-lg font-bold text-brand-blue-dark transition-colors hover:bg-white shadow-lg">
             Submit a Manuscript
-          </button>
+          </Link>
         </div>
       </section>
     </div>
